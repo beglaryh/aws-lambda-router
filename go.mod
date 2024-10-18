@@ -1,5 +1,5 @@
-module gitub.com/beglaryh/api-gateway-router
+module gitub.com/beglaryh/api-lambda-router
 
 go 1.23.1
 
-require github.com/aws/aws-lambda-go v1.47.0 // indirect
+require github.com/aws/aws-lambda-go v1.47.0
