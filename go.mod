@@ -1,4 +1,4 @@
-module gitub.com/beglaryh/aws-lambda-router
+module github.com/beglaryh/aws-lambda-router
 
 go 1.23.1
 
