@@ -2,93 +2,59 @@ package router
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/beglaryh/aws-lambda-router/context"
+	"github.com/beglaryh/aws-lambda-router/handler"
+	"github.com/beglaryh/aws-lambda-router/http"
 )
 
 type Router struct {
-	gets    map[string]PathElement
-	puts    map[string]PathElement
-	patches map[string]PathElement
-	posts   map[string]PathElement
-}
-
-type PathElement struct {
-	context                  RouteContext
-	handler                  func(RouteContext) (HttpResponse, error)
-	errorHandler             func(error) (HttpResponse, error)
-	mandatoryQueryParameters []string
-}
-
-type HttpResponse struct {
-	Code int
-	Body any
-}
-
-type RouteContext struct {
-	PathParameters  map[string]string
-	QueryParameters map[string]string
-	Headers         map[string]string
+	gets    map[string]handler.Handler
+	puts    map[string]handler.Handler
+	patches map[string]handler.Handler
+	posts   map[string]handler.Handler
 }
 
 func New() *Router {
 	return &Router{
-		gets: map[string]PathElement{},
+		gets: map[string]handler.Handler{},
 	}
 }
 
-func (r *Router) RegisterGet(
-	path string,
-	handler func(context RouteContext) (HttpResponse, error),
-	errorHandler func(err error) (HttpResponse, error),
-	mandatoryQueryParameters []string) {
-
-	r.register(GET, path, handler, errorHandler, mandatoryQueryParameters)
+func (r *Router) RegisterGet(path string, handler handler.Handler) error {
+	return r.register(http.GET, path, handler)
 }
 
-func (r *Router) RegisterPut(
-	path string,
-	handler func(context RouteContext) (HttpResponse, error),
-	errorHandler func(err error) (HttpResponse, error),
-	mandatoryQueryParameters []string) {
-
-	r.register(PUT, path, handler, errorHandler, mandatoryQueryParameters)
+func (r *Router) RegisterPut(path string, handler handler.Handler) error {
+	return r.register(http.PUT, path, handler)
 }
 
-func (r *Router) RegisterPatch(
-	path string,
-	handler func(context RouteContext) (HttpResponse, error),
-	errorHandler func(err error) (HttpResponse, error),
-	mandatoryQueryParameters []string) {
-
-	r.register(PATCH, path, handler, errorHandler, mandatoryQueryParameters)
+func (r *Router) RegisterPatch(path string, handler handler.Handler) error {
+	return r.register(http.PATCH, path, handler)
 }
 
-func (r *Router) RegisterPost(
-	path string,
-	handler func(context RouteContext) (HttpResponse, error),
-	errorHandler func(err error) (HttpResponse, error),
-	mandatoryQueryParameters []string) {
-
-	r.register(POST, path, handler, errorHandler, mandatoryQueryParameters)
+func (r *Router) RegisterPost(path string, handler handler.Handler) error {
+	return r.register(http.POST, path, handler)
 }
 
 func (r *Router) Route(event events.APIGatewayProxyRequest) events.APIGatewayProxyResponse {
-	httpMethod, err := HttpMethodFrom(event.HTTPMethod)
+	httpMethod, err := http.MethodFrom(event.HTTPMethod)
 
 	if err != nil {
 		return defaultErrorResponse()
 	}
 
 	switch httpMethod {
-	case GET:
+	case http.GET:
 		return route(r.gets, event)
-	case PUT:
+	case http.PUT:
 		return route(r.puts, event)
-	case PATCH:
+	case http.PATCH:
 		return route(r.patches, event)
-	case POST:
+	case http.POST:
 		return route(r.posts, event)
 	default:
 		response := events.APIGatewayProxyResponse{
@@ -98,52 +64,64 @@ func (r *Router) Route(event events.APIGatewayProxyRequest) events.APIGatewayPro
 	}
 
 }
-func route(methodPaths map[string]PathElement, event events.APIGatewayProxyRequest) events.APIGatewayProxyResponse {
-	pathElement, ok := methodPaths[event.Resource]
+func route(methodPaths map[string]handler.Handler, event events.APIGatewayProxyRequest) events.APIGatewayProxyResponse {
+	handler, ok := methodPaths[event.Resource]
 	if !ok {
 		response := events.APIGatewayProxyResponse{
 			StatusCode: 404,
 		}
 		return response
 	}
-	pathElement.context.QueryParameters = event.QueryStringParameters
-	pathElement.context.PathParameters = event.PathParameters
-	validationResponse, pass := validateQueryParameters(pathElement.mandatoryQueryParameters, event.QueryStringParameters)
+	validationResponse, pass := validateQueryParameters(handler.MandatoryQueryParameters, event.QueryStringParameters)
 	if !pass {
 		return validationResponse
 	}
-	return handleResponse(pathElement)
+
+	context := context.Context{
+		Body:            event.Body,
+		QueryParameters: event.QueryStringParameters,
+		PathParameters:  event.PathParameters,
+		Headers:         event.Headers,
+	}
+
+	return handleResponse(handler, context)
 }
 
-func (r *Router) register(
-	method HTTPMethod,
-	path string,
-	getFunc func(context RouteContext) (HttpResponse, error),
-	errorHandler func(err error) (HttpResponse, error),
-	mandatoryQueryParameters []string) {
+func (r *Router) register(method http.HTTPMethod, path string, handler handler.Handler) error {
+	if !method.IsValid() {
+		return errors.New("invalid http method")
+	}
+	if len(path) == 0 {
+		return errors.New("invalid resource")
+	}
 
-	element := PathElement{
-		handler:                  getFunc,
-		errorHandler:             errorHandler,
-		mandatoryQueryParameters: mandatoryQueryParameters,
+	if handler.Handler == nil {
+		return errors.New("resource handler required")
 	}
 
 	switch method {
-	case GET:
-		r.gets[path] = element
+	case http.GET:
+		r.gets[path] = handler
+	case http.PATCH:
+		r.patches[path] = handler
+	case http.PUT:
+		r.puts[path] = handler
+	case http.POST:
+		r.posts[path] = handler
 	}
+	return nil
 }
 
-func handleResponse(pathElement PathElement) events.APIGatewayProxyResponse {
+func handleResponse(pathElement handler.Handler, context context.Context) events.APIGatewayProxyResponse {
 
-	httpResponse, err := pathElement.handler(pathElement.context)
+	Response, err := pathElement.Handler(context)
 	if err != nil {
-		if pathElement.errorHandler == nil {
+		if pathElement.ErrorHandler == nil {
 			r := defaultErrorResponse()
-			if httpResponse.Code != 0 {
-				r.StatusCode = httpResponse.Code
-				if httpResponse.Body != nil {
-					jsonData, err := json.Marshal(httpResponse.Body)
+			if Response.Code != 0 {
+				r.StatusCode = Response.Code
+				if Response.Body != nil {
+					jsonData, err := json.Marshal(Response.Body)
 					if err != nil {
 						return defaultErrorResponse()
 					}
@@ -152,26 +130,26 @@ func handleResponse(pathElement PathElement) events.APIGatewayProxyResponse {
 				}
 			}
 		}
-		httpResponse, err = pathElement.errorHandler(err)
+		Response, err = pathElement.ErrorHandler(err)
 		if err != nil {
 			return defaultErrorResponse()
 		}
-		jsonData, err := json.Marshal(httpResponse.Body)
+		jsonData, err := json.Marshal(Response.Body)
 		if err != nil {
 			return defaultErrorResponse()
 		}
 		return events.APIGatewayProxyResponse{
-			StatusCode: httpResponse.Code,
+			StatusCode: Response.Code,
 			Body:       string(jsonData),
 		}
 	}
 
-	jsonData, err := json.Marshal(httpResponse.Body)
+	jsonData, err := json.Marshal(Response.Body)
 	if err != nil {
 		return defaultErrorResponse()
 	}
 	return events.APIGatewayProxyResponse{
-		StatusCode: httpResponse.Code,
+		StatusCode: Response.Code,
 		Body:       string(jsonData),
 	}
 }

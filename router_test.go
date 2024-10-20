@@ -5,15 +5,17 @@ import (
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/beglaryh/aws-lambda-router/context"
+	"github.com/beglaryh/aws-lambda-router/handler"
+	"github.com/beglaryh/aws-lambda-router/http"
 )
 
 func TestSimpleGet(t *testing.T) {
 	router := New()
+
 	router.RegisterGet(
 		"/path",
-		getFunction,
-		errorFunction,
-		nil,
+		handler.Builder().Handler(getFunction).ErrorHandler(errorFunction).Build(),
 	)
 	event := events.APIGatewayProxyRequest{
 		HTTPMethod:            "GET",
@@ -42,9 +44,11 @@ func TestMandatoryQueryParameters(t *testing.T) {
 	router := New()
 	router.RegisterGet(
 		"/path",
-		getFunction,
-		errorFunction,
-		[]string{"param1"},
+		handler.Builder().
+			Handler(getFunction).
+			ErrorHandler(errorFunction).
+			MandatoryQueryParameters([]string{"param1"}).
+			Build(),
 	)
 	event := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
@@ -59,14 +63,14 @@ func TestMandatoryQueryParameters(t *testing.T) {
 	}
 }
 
-func getFunction(context RouteContext) (HttpResponse, error) {
+func getFunction(context context.Context) (http.Response, error) {
 	_, ok := context.QueryParameters["param1"]
 	if !ok {
-		return HttpResponse{Code: 400}, errors.New("Missing parameter")
+		return http.Response{Code: 400}, errors.New("Missing parameter")
 	}
-	return HttpResponse{Code: 200, Body: map[string]string{"Hello": "World!"}}, nil
+	return http.Response{Code: 200, Body: map[string]string{"Hello": "World!"}}, nil
 }
 
-func errorFunction(err error) (HttpResponse, error) {
-	return HttpResponse{Code: 400, Body: err}, nil
+func errorFunction(err error) (http.Response, error) {
+	return http.Response{Code: 400, Body: err}, nil
 }

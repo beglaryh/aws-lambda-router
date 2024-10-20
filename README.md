@@ -25,15 +25,20 @@ If the client attempts to hit and resource which is not registered, the followin
 
 func Handler(_ context.Context, r events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
     // This is only an example! The router generally should be initialized once and reused!
-    router := router.New()
-    router.RegisterGet(
-        "/v1/some/path"
-        handler,
-        errorHandler,
-        [] string {"p1"}
-    )
-
-    return router.Route(r), nil
+	router := New()
+	router.RegisterGet(
+		"/path",
+		handler.Builder().
+			Handler(getFunction).
+			ErrorHandler(errorFunction).
+			MandatoryQueryParameters([]string{"param1"}).
+			Build(),
+	)
+	event := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Resource:   "/path",
+	}
+	return router.Route(event), nil
 }
 
 ```

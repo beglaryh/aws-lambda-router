@@ -1,4 +1,4 @@
-package router
+package http
 
 import (
 	"errors"
@@ -14,7 +14,7 @@ const (
 	POST
 )
 
-func HttpMethodFrom(str string) (HTTPMethod, error) {
+func MethodFrom(str string) (HTTPMethod, error) {
 
 	switch strings.ToUpper(str) {
 	case "GET":
@@ -28,4 +28,8 @@ func HttpMethodFrom(str string) (HTTPMethod, error) {
 	default:
 		return 0, errors.New("unknown HttpMethod")
 	}
+}
+
+func (method HTTPMethod) IsValid() bool {
+	return method >= GET && method <= POST
 }
