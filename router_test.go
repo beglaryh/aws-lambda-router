@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -63,6 +64,29 @@ func TestMandatoryQueryParameters(t *testing.T) {
 	}
 }
 
+func TestPost(t *testing.T) {
+	router := New()
+	router.RegisterPost("/post",
+		handler.Builder().
+			Handler(postFunction).
+			ErrorHandler(errorFunction).
+			Build(),
+	)
+	message := MessageBody{
+		Name: "john",
+	}
+	json, _ := json.Marshal(message)
+	event := events.APIGatewayProxyRequest{
+		Resource:   "/post",
+		HTTPMethod: "POST",
+		Body:       string(json),
+	}
+	response := router.Route(event)
+	if response.Body != "john" {
+		t.Fail()
+	}
+}
+
 func getFunction(context context.Context) (http.Response, error) {
 	_, ok := context.QueryParameters["param1"]
 	if !ok {
@@ -71,6 +95,24 @@ func getFunction(context context.Context) (http.Response, error) {
 	return http.Response{Code: 200, Body: map[string]string{"Hello": "World!"}}, nil
 }
 
+func postFunction(context context.Context) (http.Response, error) {
+	body, _ := deserialize(context.Body)
+	return http.Response{
+		Code: 200,
+		Body: body.Name,
+	}, nil
+}
+
 func errorFunction(err error) (http.Response, error) {
 	return http.Response{Code: 400, Body: err}, nil
+}
+
+type MessageBody struct {
+	Name string `json:"name"`
+}
+
+func deserialize(body string) (MessageBody, error) {
+	var t MessageBody
+	err := json.Unmarshal([]byte(body), &t)
+	return t, err
 }

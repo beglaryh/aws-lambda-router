@@ -20,7 +20,10 @@ type Router struct {
 
 func New() *Router {
 	return &Router{
-		gets: map[string]handler.Handler{},
+		gets:    map[string]handler.Handler{},
+		puts:    map[string]handler.Handler{},
+		patches: map[string]handler.Handler{},
+		posts:   map[string]handler.Handler{},
 	}
 }
 
@@ -112,16 +115,16 @@ func (r *Router) register(method http.HTTPMethod, path string, handler handler.H
 	return nil
 }
 
-func handleResponse(pathElement handler.Handler, context context.Context) events.APIGatewayProxyResponse {
+func handleResponse(handler handler.Handler, context context.Context) events.APIGatewayProxyResponse {
 
-	Response, err := pathElement.Handler(context)
+	response, err := handler.Handler(context)
 	if err != nil {
-		if pathElement.ErrorHandler == nil {
+		if handler.ErrorHandler == nil {
 			r := defaultErrorResponse()
-			if Response.Code != 0 {
-				r.StatusCode = Response.Code
-				if Response.Body != nil {
-					jsonData, err := json.Marshal(Response.Body)
+			if response.Code != 0 {
+				r.StatusCode = response.Code
+				if response.Body != nil {
+					jsonData, err := json.Marshal(response.Body)
 					if err != nil {
 						return defaultErrorResponse()
 					}
@@ -130,27 +133,24 @@ func handleResponse(pathElement handler.Handler, context context.Context) events
 				}
 			}
 		}
-		Response, err = pathElement.ErrorHandler(err)
+		response, err = handler.ErrorHandler(err)
 		if err != nil {
 			return defaultErrorResponse()
-		}
-		jsonData, err := json.Marshal(Response.Body)
-		if err != nil {
-			return defaultErrorResponse()
-		}
-		return events.APIGatewayProxyResponse{
-			StatusCode: Response.Code,
-			Body:       string(jsonData),
 		}
 	}
 
-	jsonData, err := json.Marshal(Response.Body)
+	return finalResponse(response)
+}
+
+func finalResponse(response http.Response) events.APIGatewayProxyResponse {
+	body, err := toResponseBody(response.Body)
 	if err != nil {
 		return defaultErrorResponse()
 	}
+
 	return events.APIGatewayProxyResponse{
-		StatusCode: Response.Code,
-		Body:       string(jsonData),
+		StatusCode: response.Code,
+		Body:       body,
 	}
 }
 
@@ -180,4 +180,17 @@ func validateQueryParameters(mandatory []string, parameters map[string]string) (
 	}
 
 	return events.APIGatewayProxyResponse{}, true
+}
+
+func toResponseBody(body any) (string, error) {
+	s, ok := body.(string)
+	if !ok {
+		jsonData, err := json.Marshal(body)
+		if err != nil {
+			return "", err
+		}
+
+		return string(jsonData), nil
+	}
+	return s, nil
 }
