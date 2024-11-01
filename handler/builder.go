@@ -9,28 +9,28 @@ type RegisterBuilder struct {
 	register *Handler
 }
 
-func Builder() RegisterBuilder {
+func Builder() *RegisterBuilder {
 	var register Handler
-	return RegisterBuilder{
+	return &RegisterBuilder{
 		register: &register,
 	}
 }
 
-func (b RegisterBuilder) Handler(handler func(context.Context) (http.Response, error)) RegisterBuilder {
+func (b *RegisterBuilder) Handler(handler func(context.Context) (http.Response, error)) *RegisterBuilder {
 	b.register.Handler = handler
 	return b
 }
 
-func (b RegisterBuilder) ErrorHandler(errorHandler func(err error) (http.Response, error)) RegisterBuilder {
+func (b *RegisterBuilder) ErrorHandler(errorHandler func(err error) (http.Response, error)) *RegisterBuilder {
 	b.register.ErrorHandler = errorHandler
 	return b
 }
 
-func (b RegisterBuilder) MandatoryQueryParameters(params []string) RegisterBuilder {
+func (b *RegisterBuilder) MandatoryQueryParameters(params []string) *RegisterBuilder {
 	b.register.MandatoryQueryParameters = params
 	return b
 }
 
-func (b RegisterBuilder) Build() Handler {
+func (b *RegisterBuilder) Build() Handler {
 	return *b.register
 }

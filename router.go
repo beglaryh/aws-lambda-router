@@ -45,7 +45,6 @@ func (r *Router) RegisterPost(path string, handler handler.Handler) error {
 
 func (r *Router) Route(event events.APIGatewayProxyRequest) events.APIGatewayProxyResponse {
 	httpMethod, err := http.MethodFrom(event.HTTPMethod)
-
 	if err != nil {
 		return defaultErrorResponse()
 	}
@@ -65,8 +64,8 @@ func (r *Router) Route(event events.APIGatewayProxyRequest) events.APIGatewayPro
 		}
 		return response
 	}
-
 }
+
 func route(methodPaths map[string]handler.Handler, event events.APIGatewayProxyRequest) events.APIGatewayProxyResponse {
 	handler, ok := methodPaths[event.Resource]
 	if !ok {
@@ -116,7 +115,6 @@ func (r *Router) register(method http.HTTPMethod, path string, handler handler.H
 }
 
 func handleResponse(handler handler.Handler, context context.Context) events.APIGatewayProxyResponse {
-
 	response, err := handler.Handler(context)
 	if err != nil {
 		if handler.ErrorHandler == nil {
@@ -161,7 +159,6 @@ func defaultErrorResponse() events.APIGatewayProxyResponse {
 }
 
 func validateQueryParameters(mandatory []string, parameters map[string]string) (events.APIGatewayProxyResponse, bool) {
-
 	for _, e := range mandatory {
 		_, ok := parameters[e]
 		if !ok {
